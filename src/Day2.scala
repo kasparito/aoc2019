@@ -1,5 +1,3 @@
-import Day2.initialState
-
 object Day2 extends Base(2) {
 
   def initialState: Array[Int] = inputLines.head.split(',').map(_.toInt)
