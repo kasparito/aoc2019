@@ -2,10 +2,18 @@ object Day7 extends Base(7) {
 
   def initialState: Array[Int] = inputLines.head.split(',').map(_.toInt)
 
+  trait State {
+    def output: Seq[Int]
+  }
+  case class WaitingForInput(output: Seq[Int]) extends State
+  case class Halted(output: Seq[Int]) extends State
+
   class IntcodeComputer(state: Array[Int]) {
 
+    private var position = 0
+
     @scala.annotation.tailrec
-    private def run(position: Int, input: Seq[Int]): Int = {
+    private def run(input: Seq[Int], output: Seq[Int]): State = {
       val instruction = state(position).toString
       val operation = instruction.takeRight(2).toInt
       val termTypes = instruction.dropRight(2).reverse.map(_.toString.toInt).padTo(2, 0)
@@ -17,40 +25,64 @@ object Day7 extends Base(7) {
       operation match {
         case 1 =>
           set(3, term(1) + term(2))
-          run(position + 4, input)
+          position += 4
+          run(input, output)
         case 2 =>
           set(3, term(1) * term(2))
-          run(position + 4, input)
+          position += 4
+          run(input, output)
+        case 3 if input.isEmpty =>
+          WaitingForInput(output)
         case 3 =>
           set(1, input.head)
-          run(position + 2, input.tail)
+          position += 2
+          run(input.tail, output)
         case 4 =>
-          run(position + 2, input :+ term(1))
+          val t = term(1)
+          position += 2
+          run(input, output :+ t)
         case 5 =>
-          run(if (term(1) != 0) term(2) else position + 3, input)
+          position = if (term(1) != 0) term(2) else position + 3
+          run(input, output)
         case 6 =>
-          run(if (term(1) == 0) term(2) else position + 3, input)
+          position = if (term(1) == 0) term(2) else position + 3
+          run(input, output)
         case 7 =>
           set(3, if (term(1) < term(2)) 1 else 0)
-          run(position + 4, input)
+          position += 4
+          run(input, output)
         case 8 =>
           set(3, if (term(1) == term(2)) 1 else 0)
-          run(position + 4, input)
+          position += 4
+          run(input, output)
         case 99 =>
-          input.head
+          Halted(output)
       }
     }
 
-    def run(input: Seq[Int]): Int =
-      run(0, input)
+    def run(input: Seq[Int]): State =
+      run(input, Seq.empty)
   }
 
   override def part1: Int = // 880726
-    (0 to 4)
-      .permutations
-      .map(_.foldLeft(0) {
-        (inputSignal, phaseSetting) =>
-          new IntcodeComputer(initialState).run(Seq(phaseSetting, inputSignal))
-      })
-      .max
+    (0 to 4).permutations.map(run).max
+
+  override def part2: Int = // 4931744
+    (5 to 9).permutations.map(run).max
+
+  private def run(settings: Seq[Int]): Int = {
+    val computers = IndexedSeq.fill(settings.size)(new IntcodeComputer(initialState))
+    computers.zip(settings).foreach {
+      case (computer, phaseSetting) =>
+        computer.run(Seq(phaseSetting))
+    }
+    var state: State = WaitingForInput(Seq(0))
+    while (state.isInstanceOf[WaitingForInput]) {
+      state = computers.foldLeft(state) {
+        case (inputState, computer) =>
+          computer.run(inputState.output)
+      }
+    }
+    state.output.head
+  }
 }
