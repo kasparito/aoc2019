@@ -1,8 +1,8 @@
 object Day5 extends Base(5) {
 
-  def initialState: Array[Int] = inputLines.head.split(',').map(_.toInt)
+  def initialState: Array[Long] = inputLines.head.split(',').map(_.toLong)
 
-  class IntcodeComputer(state: Array[Int]) {
+  class IntcodeComputer2(state: Array[Int]) {
 
     @scala.annotation.tailrec
     private def run(position: Int, input: Int): Int = {
@@ -43,9 +43,10 @@ object Day5 extends Base(5) {
       run(0, input)
   }
 
-  override def part1: Int = // 13087969
-    new IntcodeComputer(initialState).run(1)
+  override def part1: Long = // 13087969
+    new IntcodeComputer2(initialState.map(_.toInt)).run(1)
+    // TODO: new IntcodeComputer(initialState).run(Seq(1)).output.head
 
-  override def part2: Int = // 14110739
-    new IntcodeComputer(initialState).run(5)
+  override def part2: Long = // 14110739
+    new IntcodeComputer(initialState).run(Seq(5)).output.head
 }
