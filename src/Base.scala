@@ -1,6 +1,12 @@
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 import scala.io.Source
 
 abstract class Base(day: Int) {
+
+  implicit class FutureWrapper[T](f: Future[T]) {
+    def await: T = Await.result(f, Duration.Inf)
+  }
 
   implicit class KeyValuePairs[K, V](pairs: Iterable[(K, V)]) {
     def groupKeyValue: Map[K, Iterable[V]] =

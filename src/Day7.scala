@@ -1,3 +1,10 @@
+import java.util.Collections
+import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
+import java.util.concurrent.atomic.AtomicLong
+
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object Day7 extends Base(7) {
 
   def initialState: Array[Long] = inputLines.head.split(',').map(_.toLong)
@@ -9,18 +16,31 @@ object Day7 extends Base(7) {
     (5 to 9).permutations.map(run).max
 
   private def run(settings: Seq[Int]): Long = {
-    val computers = IndexedSeq.fill(settings.size)(new IntcodeComputer(initialState))
-    computers.zip(settings).foreach {
-      case (computer, phaseSetting) =>
-        computer.run(Seq(phaseSetting))
+    val inputQueues = settings
+      .map(phaseSetting => new LinkedBlockingDeque[Long](Collections.singleton(phaseSetting.toLong)))
+      .toIndexedSeq
+    inputQueues.head.put(0)
+    Future.sequence(inputQueues.zipWithIndex.map {
+      case (inputQueue, index) =>
+        val outputQueue = inputQueues((index + 1) % inputQueues.size)
+        IntcodeComputer.run(initialState, new PhaseHandler(inputQueue, outputQueue))
+    }).await.last
+  }
+
+  class PhaseHandler(
+      inputQueue: BlockingQueue[Long],
+      outputQueue: BlockingQueue[Long])
+    extends Handler[Long] {
+
+    private val lastOutput = new AtomicLong()
+
+    override def input: Long = inputQueue.take()
+
+    override def handle(output: Long): Unit = {
+      lastOutput.set(output)
+      outputQueue.put(output)
     }
-    var state: State = WaitingForInput(Seq(0))
-    while (state.isInstanceOf[WaitingForInput]) {
-      state = computers.foldLeft(state) {
-        case (inputState, computer) =>
-          computer.run(inputState.output)
-      }
-    }
-    state.output.head
+
+    override def output: Long = lastOutput.get()
   }
 }

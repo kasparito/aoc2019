@@ -1,12 +1,40 @@
 import scala.collection.mutable
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
-trait State {
-  def output: Seq[Long]
+trait Handler[T] {
+  def input: Long
+  def handle(output: Long): Unit
+  def output: T
 }
-case class WaitingForInput(output: Seq[Long]) extends State
-case class Halted(output: Seq[Long]) extends State
 
-class IntcodeComputer(initialState: Array[Long]) {
+class SimpleHandler(initialInput: Seq[Long] = Seq.empty) extends Handler[Seq[Long]] {
+  private var remainingInput = initialInput
+  private var intermediateOutput = Seq.empty[Long]
+
+  override def input: Long = {
+    val next = remainingInput.head
+    remainingInput = remainingInput.tail
+    next
+  }
+
+  override def handle(output: Long): Unit =
+    intermediateOutput = intermediateOutput :+ output
+
+  override def output: Seq[Long] =
+    intermediateOutput
+}
+
+object IntcodeComputer {
+  def run[T](initialState: Array[Long], handler: Handler[T]): Future[T] =
+    Future(new IntcodeComputer(initialState, handler.input, handler.handle).run())
+      .map(_ => handler.output)
+}
+
+class IntcodeComputer(
+    initialState: Array[Long],
+    input: => Long,
+    output: Long => Unit) {
 
   private val stateMap = mutable.Map[Long, Long]() ++ initialState.zipWithIndex.map { case (a, b) => (b.toLong, a) }
   private def state(ix: Long): Long = stateMap.getOrElseUpdate(ix, 0L)
@@ -14,8 +42,7 @@ class IntcodeComputer(initialState: Array[Long]) {
   private var position = 0L
   private var relativeBase = 0L
 
-  @scala.annotation.tailrec
-  private def run(input: Seq[Long], output: Seq[Long]): State = {
+  def run(): Unit = while (true) {
     val instruction = state(position).toString
     val operation = instruction.takeRight(2).toInt
     val termTypes = instruction.dropRight(2).reverse.map(_.toString.toInt).padTo(3, 0)
@@ -30,55 +57,43 @@ class IntcodeComputer(initialState: Array[Long]) {
     }
 
     def set(i: Int, v: Long): Unit = {
+      val value = state(position + i)
       val resultPosition = termTypes(i - 1) match {
-        case 0 => position + i
-        case 2 => position + i + relativeBase
+        case 0 => value
+        case 2 => value + relativeBase
       }
-      stateMap(state(resultPosition)) = v
+      stateMap(resultPosition) = v
     }
 
     operation match {
       case 1 =>
         set(3, term(1) + term(2))
         position += 4
-        run(input, output)
       case 2 =>
         set(3, term(1) * term(2))
         position += 4
-        run(input, output)
-      case 3 if input.isEmpty =>
-        WaitingForInput(output)
       case 3 =>
-        set(1, input.head)
+        set(1, input)
         position += 2
-        run(input.tail, output)
       case 4 =>
         val t = term(1)
         position += 2
-        run(input, output :+ t)
+        output(t)
       case 5 =>
         position = if (term(1) != 0) term(2) else position + 3
-        run(input, output)
       case 6 =>
         position = if (term(1) == 0) term(2) else position + 3
-        run(input, output)
       case 7 =>
         set(3, if (term(1) < term(2)) 1 else 0)
         position += 4
-        run(input, output)
       case 8 =>
         set(3, if (term(1) == term(2)) 1 else 0)
         position += 4
-        run(input, output)
       case 9 =>
         relativeBase += term(1)
         position += 2
-        run(input, output)
       case 99 =>
-        Halted(output)
+        return
     }
   }
-
-  def run(input: Seq[Long]): State =
-    run(input, Seq.empty)
 }
